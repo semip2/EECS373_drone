@@ -45,16 +45,15 @@ UART_HandleTypeDef hlpuart1;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-uint8_t rxData;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_LPUART1_UART_Init(void);
-static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -69,11 +68,6 @@ static void MX_USART1_UART_Init(void);
 #define PWR_MGMT_1_REG 0x6B
 #define WHO_AM_I_REG 0x75
 #define MPU6050_ADDR 0xD0
-
-#define BUFFER_LEN 1
-
-uint8_t RX_BUFFER[BUFFER_LEN] = {0};
-uint8_t TX_BUFFER[BUFFER_LEN] = {0};
 
 int16_t Accel_X_RAW = 0;
 int16_t Accel_Y_RAW = 0;
@@ -115,9 +109,9 @@ void MPU6050_Read_Accel(void)
 	Accel_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
 	Accel_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
 
-	Ax = Accel_X_RAW/16384.0;
-	Ay = Accel_Y_RAW/16384.0;
-	Az = Accel_Z_RAW/16384.0;
+	Ax = Accel_X_RAW;
+	Ay = Accel_Y_RAW;
+	Az = Accel_Z_RAW;
 }
 
 void MPU6050_Read_Gyro(void)
@@ -141,6 +135,7 @@ void MPU6050_Read_Gyro(void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -161,12 +156,11 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_LPUART1_UART_Init();
-  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   MPU6050_Init();
-  HAL_UART_Receive_IT(&huart1, RX_BUFFER, BUFFER_LEN); // Enabling interrupt receive
 
   /* USER CODE END 2 */
 
@@ -176,21 +170,46 @@ int main(void)
   {
 	  MPU6050_Read_Accel();
 	  MPU6050_Read_Gyro();
-/*
-	  printf("Ax = %fg", Ax);
-	  printf("        Ay = %fg", Ay);
-	  printf("        Az = %fg\n", Az);
 
-	  printf("Gx = %fg", Gx);
-	  printf("        Gy = %fg", Gy);
-	  printf("        Gz = %fg\n", Gz);
+	  //printf("Ax = %fg", Ax);
+	  //printf("        Ay = %fg", Ay);
+	  //printf("        Az = %fg\n", Az);
 
-	  printf("\n");
-*/
+	  //printf("Gx = %fg", Gx);
+	  //printf("        Gy = %fg", Gy);
+	  //printf("        Gz = %fg\n", Gz);
 
-      TX_BUFFER[0] = Ax;
-      HAL_UART_Transmit(&huart1, TX_BUFFER, sizeof(TX_BUFFER), 100);
-      HAL_Delay(25);
+	  if (Ax <= 950 && Ax >= 600 && Ay <= -50 && Ay >= -400 && Az <= 15550 && Az >= 15100) {
+		  uint8_t center[] = "center \r\n";
+		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
+	  }
+	  else if (Ax <=17400 && Ax >= 3100 && Ay <= 250 && Ay >= -180 && Az <= 15000 && Az >= -1790) {
+		  uint8_t left[] = "left \r\n";
+		  HAL_UART_Transmit(&huart1, left, sizeof(left), 10);
+	  }
+	  else if (Ax <= -5100 && Ax >= -15850 && Ay <= -200 && Ay >= -320 && Az <= 14300 && Az >= -1200) {
+		  uint8_t right[] = "right \r\n";
+		  HAL_UART_Transmit(&huart1, right, sizeof(right), 10);
+	  }
+	  else if (Ax <= 900 && Ax >= 600 && Ay <= -1900 && Ay >= -17000 && Az <= 15100 && Az >= -1400) {
+		  uint8_t down[] = "down \r\n";
+		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
+	  }
+	  else if (Ax <= 900 && Ax >= 300 && Ay <= 16300 && Ay >= 1100 && Az <= 15400 && Az >= -1500) {
+		  uint8_t up[] = "up \r\n";
+		  HAL_UART_Transmit(&huart1, up, sizeof(up), 10);
+	  }
+	  else {
+		  printf("Ax = %fg", Ax);
+		  printf("        Ay = %fg", Ay);
+		  printf("        Az = %fg\n", Az);
+	  }
+
+	  //printf("\n");
+	  //uint8_t data[] = "HELLO WORLD \r\n";
+	  //HAL_UART_Transmit(&huart1, data, sizeof(data), 10);
+	  //HAL_Delay(250);
+
 
     /* USER CODE END WHILE */
 
@@ -228,13 +247,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
   RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-  RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 16;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
-  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -244,12 +257,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
@@ -275,7 +288,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00707CBB;
+  hi2c1.Init.Timing = 0x00000E14;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -383,53 +396,25 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PA1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : VCP_RX_Pin */
-  GPIO_InitStruct.Pin = VCP_RX_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF3_USART2;
-  HAL_GPIO_Init(VCP_RX_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD3_Pin */
-  GPIO_InitStruct.Pin = LD3_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD3_GPIO_Port, &GPIO_InitStruct);
-
 }
 
 /* USER CODE BEGIN 4 */
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+  #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif /* __GNUC__ */
+PUTCHAR_PROTOTYPE
 {
-    if(huart->Instance == huart1.Instance)
-    {
-    	HAL_UART_Receive_IT(&huart1, RX_BUFFER, BUFFER_LEN);
-    }
+  HAL_UART_Transmit(&hlpuart1, (uint8_t *)&ch, 1, 0xFFFF);
+  return ch;
 }
-
 
 /* USER CODE END 4 */
 
