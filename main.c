@@ -79,6 +79,8 @@ int16_t Gyro_Z_RAW = 0;
 
 float Ax, Ay, Az, Gx, Gy, Gz;
 
+uint8_t button_val = 0;
+
 void MPU6050_Init (void)
 {
 	uint8_t check, Data;
@@ -171,44 +173,47 @@ int main(void)
 	  MPU6050_Read_Accel();
 	  MPU6050_Read_Gyro();
 
-	  //printf("Ax = %fg", Ax);
-	  //printf("        Ay = %fg", Ay);
-	  //printf("        Az = %fg\n", Az);
+	  uint8_t start[] = "A";
+	  HAL_UART_Transmit(&huart1, start, sizeof(start), 10);
 
-	  //printf("Gx = %fg", Gx);
-	  //printf("        Gy = %fg", Gy);
-	  //printf("        Gz = %fg\n", Gz);
+	  button_val = HAL_GPIO_ReadPin(b1bus_GPIO_Port, b1bus_Pin);
+	  // 1 = pressed
+	  if(button_val == 1) {
+		  uint8_t pressed[] = "O";
+		  HAL_UART_Transmit(&huart1, pressed, sizeof(pressed), 10);
+	  }
+	  else {
+		  uint8_t not_pressed[] = "X";
+	  	  HAL_UART_Transmit(&huart1, not_pressed, sizeof(not_pressed), 10);
+	  }
 
 	  if (Ax <= 950 && Ax >= 600 && Ay <= -50 && Ay >= -400 && Az <= 15550 && Az >= 15100) {
-		  uint8_t center[] = "center \r\n";
+		  uint8_t center[] = "C";
 		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
 	  }
 	  else if (Ax <=17400 && Ax >= 3100 && Ay <= 250 && Ay >= -180 && Az <= 15000 && Az >= -1790) {
-		  uint8_t left[] = "left \r\n";
+		  uint8_t left[] = "L";
 		  HAL_UART_Transmit(&huart1, left, sizeof(left), 10);
 	  }
 	  else if (Ax <= -5100 && Ax >= -15850 && Ay <= -200 && Ay >= -320 && Az <= 14300 && Az >= -1200) {
-		  uint8_t right[] = "right \r\n";
+		  uint8_t right[] = "R";
 		  HAL_UART_Transmit(&huart1, right, sizeof(right), 10);
 	  }
 	  else if (Ax <= 900 && Ax >= 600 && Ay <= -1900 && Ay >= -17000 && Az <= 15100 && Az >= -1400) {
-		  uint8_t down[] = "down \r\n";
+		  uint8_t down[] = "D";
 		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
 	  }
 	  else if (Ax <= 900 && Ax >= 300 && Ay <= 16300 && Ay >= 1100 && Az <= 15400 && Az >= -1500) {
-		  uint8_t up[] = "up \r\n";
+		  uint8_t up[] = "U";
 		  HAL_UART_Transmit(&huart1, up, sizeof(up), 10);
 	  }
 	  else {
-		  printf("Ax = %fg", Ax);
-		  printf("        Ay = %fg", Ay);
-		  printf("        Az = %fg\n", Az);
+		  uint8_t error[] = "E";
+		  HAL_UART_Transmit(&huart1, error, sizeof(error), 10);
 	  }
 
-	  //printf("\n");
-	  //uint8_t data[] = "HELLO WORLD \r\n";
-	  //HAL_UART_Transmit(&huart1, data, sizeof(data), 10);
-	  //HAL_Delay(250);
+	  uint8_t end[] = "Z";
+	  HAL_UART_Transmit(&huart1, end, sizeof(end), 10);
 
 
     /* USER CODE END WHILE */
@@ -396,11 +401,18 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin : b1bus_Pin */
+  GPIO_InitStruct.Pin = b1bus_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(b1bus_GPIO_Port, &GPIO_InitStruct);
 
 }
 
