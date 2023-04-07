@@ -77,8 +77,6 @@ int16_t Gyro_X_RAW = 0;
 int16_t Gyro_Y_RAW = 0;
 int16_t Gyro_Z_RAW = 0;
 
-float Ax, Ay, Az, Gx, Gy, Gz;
-
 uint8_t button_val = 0;
 
 void MPU6050_Init (void)
@@ -110,10 +108,6 @@ void MPU6050_Read_Accel(void)
 	Accel_X_RAW = (int16_t)(Rec_Data[0] << 8 | Rec_Data [1]);
 	Accel_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
 	Accel_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
-
-	Ax = Accel_X_RAW;
-	Ay = Accel_Y_RAW;
-	Az = Accel_Z_RAW;
 }
 
 void MPU6050_Read_Gyro(void)
@@ -123,10 +117,6 @@ void MPU6050_Read_Gyro(void)
 	Gyro_X_RAW = (int16_t)(Rec_Data[0] << 8 | Rec_Data [1]);
 	Gyro_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
 	Gyro_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
-
-	Gx = Gyro_X_RAW/131.0;
-	Gy = Gyro_Y_RAW/131.0;
-	Gz = Gyro_Z_RAW/131.0;
 }
 /* USER CODE END 0 */
 
@@ -168,53 +158,85 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  float x_acc, y_acc, x_gyro, y_gyro;
+  float angleX_old, angleY_old, angleX, angleY;
+
+  angleX_old = 0;
+  angleY_old = 0;
+
+  float x_acc_offset = 312.86;
+  float y_acc_offset = -295.86;
+  float x_gyro_offset = -552.82;
+  float y_gyro_offset = 297.632;
+  float acc_scale = 180/(3.14*16384.0);
+  float gyro_scale = 1.0/131.0;
+  float alpha = 0.02;
+  float dt = 0.01;
+
+  uint8_t start[] = "A";
+  uint8_t center[] = "C";
+  uint8_t left[] = "L";
+  uint8_t right[] = "R";
+  uint8_t up[] = "U";
+  uint8_t down[] = "D";
+  uint8_t end[] = "Z";
+
+  uint8_t pressed[] = "O";
+  uint8_t unpressed[] = "X";
+
   while (1)
   {
+	  HAL_UART_Transmit(&huart1, start, sizeof(start), 10);
+
+	  // -------------------------------------------------------------------- read button
+	  button_val = HAL_GPIO_ReadPin(b1bus_GPIO_Port, b1bus_Pin);
+	  if (button_val == 1) {
+		  HAL_UART_Transmit(&huart1, pressed, sizeof(pressed), 10);
+		  printf("----------\n");
+	  }
+	  else {
+		  HAL_UART_Transmit(&huart1, unpressed, sizeof(unpressed), 10);
+	  }
+
+	  // -------------------------------------------------------------------- read sensors
 	  MPU6050_Read_Accel();
 	  MPU6050_Read_Gyro();
 
-	  uint8_t start[] = "A";
-	  HAL_UART_Transmit(&huart1, start, sizeof(start), 10);
+	  x_acc = (float) (Accel_X_RAW - x_acc_offset) * acc_scale;
+	  y_acc = (float) (Accel_Y_RAW - y_acc_offset) * acc_scale;
+	  x_gyro = (float) (Gyro_X_RAW - x_gyro_offset) * gyro_scale;
+	  y_gyro = (float) (Gyro_Y_RAW - y_gyro_offset) * gyro_scale;
 
-	  button_val = HAL_GPIO_ReadPin(b1bus_GPIO_Port, b1bus_Pin);
-	  // 1 = pressed
-	  if(button_val == 1) {
-		  uint8_t pressed[] = "O";
-		  HAL_UART_Transmit(&huart1, pressed, sizeof(pressed), 10);
-	  }
-	  else {
-		  uint8_t not_pressed[] = "X";
-	  	  HAL_UART_Transmit(&huart1, not_pressed, sizeof(not_pressed), 10);
-	  }
+	  // -------------------------------------------------------------------- calculate angles
+	  angleX = (1 - alpha)*(angleX_old + x_gyro*dt) + (alpha * x_acc);
+	  angleY = (1 - alpha)*(angleY_old + y_gyro*dt) + (alpha * y_acc);
+	  angleX_old = angleX;
+	  angleY_old = angleY;
 
-	  if (Ax <= 950 && Ax >= 600 && Ay <= -50 && Ay >= -400 && Az <= 15550 && Az >= 15100) {
-		  uint8_t center[] = "C";
-		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
-	  }
-	  else if (Ax <=17400 && Ax >= 3100 && Ay <= 250 && Ay >= -180 && Az <= 15000 && Az >= -1790) {
-		  uint8_t left[] = "L";
+	  // -------------------------------------------------------------------- determine orientation
+	  if (angleX >= 40) {
 		  HAL_UART_Transmit(&huart1, left, sizeof(left), 10);
+		  printf("left\n");
 	  }
-	  else if (Ax <= -5100 && Ax >= -15850 && Ay <= -200 && Ay >= -320 && Az <= 14300 && Az >= -1200) {
-		  uint8_t right[] = "R";
+	  else if (angleX <= -40) {
 		  HAL_UART_Transmit(&huart1, right, sizeof(right), 10);
+		  printf("right\n");
 	  }
-	  else if (Ax <= 900 && Ax >= 600 && Ay <= -1900 && Ay >= -17000 && Az <= 15100 && Az >= -1400) {
-		  uint8_t down[] = "D";
-		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
-	  }
-	  else if (Ax <= 900 && Ax >= 300 && Ay <= 16300 && Ay >= 1100 && Az <= 15400 && Az >= -1500) {
-		  uint8_t up[] = "U";
+	  else if (angleX >= -15 && angleX <= 15 && angleY >= 35) {
 		  HAL_UART_Transmit(&huart1, up, sizeof(up), 10);
+		  printf("up\n");
+	  }
+	  else if (angleX >= -15 && angleX <= 15 && angleY <= -35) {
+		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
+		  printf("down\n");
 	  }
 	  else {
-		  uint8_t error[] = "E";
-		  HAL_UART_Transmit(&huart1, error, sizeof(error), 10);
+		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
+		  printf("center\n");
 	  }
-
-	  uint8_t end[] = "Z";
+	  //printf("%f          %f\n\n", angleX, angleY);
 	  HAL_UART_Transmit(&huart1, end, sizeof(end), 10);
-
 
     /* USER CODE END WHILE */
 
