@@ -159,16 +159,19 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  float x_acc, y_acc, x_gyro, y_gyro;
-  float angleX_old, angleY_old, angleX, angleY;
+  float x_acc, y_acc, z_acc, x_gyro, y_gyro, z_gyro;
+  float angleX_old, angleY_old, angleZ_old, angleX, angleY, angleZ;
 
   angleX_old = 0;
   angleY_old = 0;
+  angleZ_old = 0;
 
   float x_acc_offset = 312.86;
   float y_acc_offset = -295.86;
+  float z_acc_offset = 14869.18;
   float x_gyro_offset = -552.82;
   float y_gyro_offset = 297.632;
+  float z_gyro_offset = 1000.185;
   float acc_scale = 180/(3.14*16384.0);
   float gyro_scale = 1.0/131.0;
   float alpha = 0.02;
@@ -205,29 +208,33 @@ int main(void)
 
 	  x_acc = (float) (Accel_X_RAW - x_acc_offset) * acc_scale;
 	  y_acc = (float) (Accel_Y_RAW - y_acc_offset) * acc_scale;
+	  z_acc = (float) (Accel_Z_RAW - z_acc_offset) * acc_scale;
 	  x_gyro = (float) (Gyro_X_RAW - x_gyro_offset) * gyro_scale;
 	  y_gyro = (float) (Gyro_Y_RAW - y_gyro_offset) * gyro_scale;
+	  z_gyro = (float) (Gyro_Z_RAW - z_gyro_offset) * gyro_scale;
 
 	  // -------------------------------------------------------------------- calculate angles
 	  angleX = (1 - alpha)*(angleX_old + x_gyro*dt) + (alpha * x_acc);
 	  angleY = (1 - alpha)*(angleY_old + y_gyro*dt) + (alpha * y_acc);
+	  angleZ = (1 - alpha)*(angleZ_old + z_gyro*dt) + (alpha * z_acc);
 	  angleX_old = angleX;
 	  angleY_old = angleY;
+	  angleZ_old = angleZ;
 
 	  // -------------------------------------------------------------------- determine orientation
-	  if (angleX >= 40) {
+	  if (angleX >= 30 && angleY > -20 && angleY < 20) {
 		  HAL_UART_Transmit(&huart1, left, sizeof(left), 10);
 		  printf("left\n");
 	  }
-	  else if (angleX <= -40) {
+	  else if (angleX <= -30 && angleY > -20 && angleY < 20) {
 		  HAL_UART_Transmit(&huart1, right, sizeof(right), 10);
 		  printf("right\n");
 	  }
-	  else if (angleX >= -15 && angleX <= 15 && angleY >= 35) {
+	  else if (angleX > -20 && angleX < 20 && angleY >= 30) {
 		  HAL_UART_Transmit(&huart1, up, sizeof(up), 10);
 		  printf("up\n");
 	  }
-	  else if (angleX >= -15 && angleX <= 15 && angleY <= -35) {
+	  else if (angleX > -20 && angleX < 20 && angleY <= -30) {
 		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
 		  printf("down\n");
 	  }
@@ -235,7 +242,7 @@ int main(void)
 		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
 		  printf("center\n");
 	  }
-	  //printf("%f          %f\n\n", angleX, angleY);
+	  printf("                    %f          %f          %f\n\n", angleX, angleY, angleZ);
 	  HAL_UART_Transmit(&huart1, end, sizeof(end), 10);
 
     /* USER CODE END WHILE */
