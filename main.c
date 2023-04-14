@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "display.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -40,6 +41,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
 
 UART_HandleTypeDef hlpuart1;
 UART_HandleTypeDef huart1;
@@ -54,30 +56,21 @@ static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_LPUART1_UART_Init(void);
+static void MX_I2C3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define SMPLRT_DIV_REG 0x19
-#define GYRO_CONFIG_REG 0x1B
-#define ACCEL_CONFIG_REG 0x1C
-#define ACCEL_XOUT_H_REG 0x3B
-#define GYRO_XOUT_H_REG 0x43
-#define PWR_MGMT_1_REG 0x6B
-#define WHO_AM_I_REG 0x75
-#define MPU6050_ADDR 0xD0
 
 int16_t Accel_X_RAW = 0;
 int16_t Accel_Y_RAW = 0;
-int16_t Accel_Z_RAW = 0;
 
 int16_t Gyro_X_RAW = 0;
 int16_t Gyro_Y_RAW = 0;
-int16_t Gyro_Z_RAW = 0;
 
-uint8_t button_val = 0;
+uint8_t button_old = 0;
 
 void MPU6050_Init (void)
 {
@@ -93,7 +86,7 @@ void MPU6050_Init (void)
 		Data = 0x07;
 		HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, SMPLRT_DIV_REG, 1, &Data, 1, 1000);
 
-	// configure gyroscope (250dps) and accelerometer (2g) registers
+	// configure gyroscope and accelerometer registers
 		Data = 0x00;
 		HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, GYRO_CONFIG_REG, 1, &Data, 1, 1000);
 		Data = 0x00;
@@ -107,7 +100,6 @@ void MPU6050_Read_Accel(void)
 	HAL_I2C_Mem_Read (&hi2c1, MPU6050_ADDR, ACCEL_XOUT_H_REG, 1, Rec_Data, 6, 1000);
 	Accel_X_RAW = (int16_t)(Rec_Data[0] << 8 | Rec_Data [1]);
 	Accel_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
-	Accel_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
 }
 
 void MPU6050_Read_Gyro(void)
@@ -116,7 +108,6 @@ void MPU6050_Read_Gyro(void)
 	HAL_I2C_Mem_Read (&hi2c1, MPU6050_ADDR, GYRO_XOUT_H_REG, 1, Rec_Data, 6, 1000);
 	Gyro_X_RAW = (int16_t)(Rec_Data[0] << 8 | Rec_Data [1]);
 	Gyro_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
-	Gyro_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
 }
 /* USER CODE END 0 */
 
@@ -151,52 +142,62 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_LPUART1_UART_Init();
+  MX_I2C3_Init();
   /* USER CODE BEGIN 2 */
   MPU6050_Init();
-
+  HD44780_Init(2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  float x_acc, y_acc, z_acc, x_gyro, y_gyro, z_gyro;
-  float angleX_old, angleY_old, angleZ_old, angleX, angleY, angleZ;
+  float x_acc, y_acc, x_gyro, y_gyro;
+  float angleX_old, angleY_old, angleX, angleY;
 
   angleX_old = 0;
   angleY_old = 0;
-  angleZ_old = 0;
 
   float x_acc_offset = 312.86;
   float y_acc_offset = -295.86;
-  float z_acc_offset = 14869.18;
   float x_gyro_offset = -552.82;
   float y_gyro_offset = 297.632;
-  float z_gyro_offset = 1000.185;
   float acc_scale = 180/(3.14*16384.0);
   float gyro_scale = 1.0/131.0;
-  float alpha = 0.02;
   float dt = 0.01;
 
-  uint8_t start[] = "A";
+  //uint8_t start[] = "A";
   uint8_t center[] = "C";
   uint8_t left[] = "L";
   uint8_t right[] = "R";
   uint8_t up[] = "U";
   uint8_t down[] = "D";
-  uint8_t end[] = "Z";
+  //uint8_t end[] = "Z";
 
   uint8_t pressed[] = "O";
   uint8_t unpressed[] = "X";
+  int flying = 0;
+
 
   while (1)
   {
-	  HAL_UART_Transmit(&huart1, start, sizeof(start), 10);
-
+	  // HAL_UART_Transmit(&huart1, start, sizeof(start), 10);
 	  // -------------------------------------------------------------------- read button
-	  button_val = HAL_GPIO_ReadPin(b1bus_GPIO_Port, b1bus_Pin);
+	  uint8_t button_val = HAL_GPIO_ReadPin(b1bus_GPIO_Port, b1bus_Pin);
 	  if (button_val == 1) {
 		  HAL_UART_Transmit(&huart1, pressed, sizeof(pressed), 10);
-		  printf("----------\n");
+		  printf("----------button pushed\n");
+		  if(flying == 0){
+			  HD44780_Clear();
+			  HD44780_SetCursor(0,0);
+			  HD44780_PrintStr("TAKING OFF...");
+			  flying = 1;
+		  }
+		  else{
+			  HD44780_Clear();
+			  HD44780_SetCursor(0,0);
+			  HD44780_PrintStr("LANDING...");
+		  }
+		  HAL_Delay(10000);
 	  }
 	  else {
 		  HAL_UART_Transmit(&huart1, unpressed, sizeof(unpressed), 10);
@@ -208,42 +209,53 @@ int main(void)
 
 	  x_acc = (float) (Accel_X_RAW - x_acc_offset) * acc_scale;
 	  y_acc = (float) (Accel_Y_RAW - y_acc_offset) * acc_scale;
-	  z_acc = (float) (Accel_Z_RAW - z_acc_offset) * acc_scale;
 	  x_gyro = (float) (Gyro_X_RAW - x_gyro_offset) * gyro_scale;
 	  y_gyro = (float) (Gyro_Y_RAW - y_gyro_offset) * gyro_scale;
-	  z_gyro = (float) (Gyro_Z_RAW - z_gyro_offset) * gyro_scale;
 
 	  // -------------------------------------------------------------------- calculate angles
-	  angleX = (1 - alpha)*(angleX_old + x_gyro*dt) + (alpha * x_acc);
-	  angleY = (1 - alpha)*(angleY_old + y_gyro*dt) + (alpha * y_acc);
-	  angleZ = (1 - alpha)*(angleZ_old + z_gyro*dt) + (alpha * z_acc);
+	  angleX = (0.98)*(angleX_old + x_gyro*dt) + (0.02 * x_acc);
+	  angleY = (0.98)*(angleY_old + y_gyro*dt) + (0.02 * y_acc);
 	  angleX_old = angleX;
 	  angleY_old = angleY;
-	  angleZ_old = angleZ;
 
 	  // -------------------------------------------------------------------- determine orientation
 	  if (angleX >= 30 && angleY > -20 && angleY < 20) {
 		  HAL_UART_Transmit(&huart1, left, sizeof(left), 10);
-		  printf("left\n");
+		  //printf("left\n");
+		  HD44780_Clear();
+		  HD44780_SetCursor(0,0);
+		  HD44780_PrintStr("LEFT");
 	  }
 	  else if (angleX <= -30 && angleY > -20 && angleY < 20) {
 		  HAL_UART_Transmit(&huart1, right, sizeof(right), 10);
-		  printf("right\n");
+		  //printf("right\n");
+		  HD44780_Clear();
+		  HD44780_SetCursor(0,0);
+		  HD44780_PrintStr("RIGHT");
 	  }
 	  else if (angleX > -20 && angleX < 20 && angleY >= 30) {
 		  HAL_UART_Transmit(&huart1, up, sizeof(up), 10);
-		  printf("up\n");
+		  //printf("up\n");
+		  HD44780_Clear();
+		  HD44780_SetCursor(0,0);
+		  HD44780_PrintStr("BACKWARD");
 	  }
 	  else if (angleX > -20 && angleX < 20 && angleY <= -30) {
 		  HAL_UART_Transmit(&huart1, down, sizeof(down), 10);
-		  printf("down\n");
+		  //printf("down\n");
+		  HD44780_Clear();
+		  HD44780_SetCursor(0,0);
+		  HD44780_PrintStr("FORWARD");
 	  }
 	  else {
 		  HAL_UART_Transmit(&huart1, center, sizeof(center), 10);
-		  printf("center\n");
+		  //printf("center\n");
+		  HD44780_Clear();
+		  HD44780_SetCursor(0,0);
+		  HD44780_PrintStr("CENTER");
 	  }
-	  printf("                    %f          %f          %f\n\n", angleX, angleY, angleZ);
-	  HAL_UART_Transmit(&huart1, end, sizeof(end), 10);
+	  //printf("                    %f          %f\n\n", angleX, angleY);
+	  //HAL_UART_Transmit(&huart1, end, sizeof(end), 10);
 
     /* USER CODE END WHILE */
 
@@ -351,6 +363,54 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.Timing = 0x00000E14;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c3, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c3, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
 
 }
 
