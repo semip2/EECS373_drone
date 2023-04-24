@@ -2,13 +2,15 @@ import socket
 
 import clr
 
+import serial 
+
 clr.AddReference('System.Windows.Forms')
 clr.AddReference('System.Drawing')
 
 from System.Drawing import Point
 from System.Windows import Forms
 
-# GUI window
+# GUI window with Bluetooth and Panic! buttons
 class CommandBox(Forms.Form):
     def __init__(self):
         self.Text = "Command Box"
@@ -22,13 +24,6 @@ class CommandBox(Forms.Form):
         self.takeoff_button.Height = 25
         self.takeoff_button.Width = 80
         self.takeoff_button.Click += self.start_click
-        
-        self.land_button = Forms.Button()
-        self.land_button.Text = 'Land'
-        self.land_button.Location = Point(110, 20)
-        self.land_button.Height = 25
-        self.land_button.Width = 80
-        self.land_button.Click += self.land_click
         
         self.panic_button = Forms.Button()
         self.panic_button.Text = 'Panic!'
@@ -46,14 +41,12 @@ class CommandBox(Forms.Form):
     def start_click(self, sender, event):
         run()
 
-    def land_click(self, sender, event):
-        land()
-
     def panic_click(self, sender, event):
         panic()
 
 def run():
 
+    #start bluetooth reading
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect(('localhost',50000)) 
 
@@ -63,79 +56,68 @@ def run():
         data = s.recv(105)
         print("Data recieved:", data)
         if not flying: 
+            #Take off to 30 cm in 10 seconds
             if(data.find(b'O') != -1): 
                 print("Taking off")
                 Script.ChangeMode('AltHold')
                 MAV.doARM(True)
                 Script.Sleep(5000)
                 Script.SendRC(3, 1500, True)  
-                #Script.SendRC(3, 1500 + Script.GetParam('THR_DZ'), True)
-                Script.Sleep(200)
+                Script.SendRC(3, 1500 + Script.GetParam('THR_DZ'), True)
+                Script.Sleep(2000)
                 Script.SendRC(3, 1500, True)  
                 Script.Sleep(2000)          
                 flying = True
         elif flying: 
+            #Land 
             if(data.find(b'O') != -1): 
                 print("Landing")
                 Script.ChangeMode('Land')
                 flying = False
                 Script.Sleep(5000)
                 break
+            #Center
             elif(data[0] == b'C'): 
                 print("Centering")
                 Script.ChangeMode('AltHold')
-                #Script.SendRC(3, 1500, True) #neutral throttle
-                Script.SendRC(1, 1500, True)
-                Script.SendRC(2, 1500, True)
-                Script.SendRC(3, 1500, True)
-                #Script.SendRC(1, 1500, True) #level roll
-                #Script.SendRC(2, 1500, True) #level pitch
-                #Script.Sleep(2000)
-            elif(data[0] == b'L'): 
-                print("Moving left")
-                #Script.SendRC(8, 1700, True) #manual mode
-                #Script.SendRC(2, 1500, True) #level pitch
-                #Script.SendRC(3, 1500, True) #neutral throttle
-                #Script.SendRC(1, 2000, True) #roll left
-                Script.SendRC(1, 1750, True)
-                Script.SendRC(2, 1500, True)
-                Script.SendRC(3, 1500, True)
-                #Script.Sleep(2000)
-            elif(data[0] == b'R'): 
-                print("Moving right")
-                #Script.SendRC(8, 1700, True) #manual mode
+                Script.SendRC(1, 1500, True) #level roll
                 Script.SendRC(2, 1500, True) #level pitch
                 Script.SendRC(3, 1500, True) #neutral throttle
+            #Left
+            elif(data[0] == b'L'): 
+                print("Moving left")
+                Script.SendRC(1, 1800, True) #roll left
+                Script.SendRC(2, 1500, True) #level pitch
+                Script.SendRC(3, 1500, True) #neutral throttle
+            #Right
+            elif(data[0] == b'R'): 
+                print("Moving right")
                 Script.SendRC(1, 1000, True) #roll right
-                #Script.Sleep(2000)
+                Script.SendRC(2, 1500, True) #level pitch
+                Script.SendRC(3, 1500, True) #neutral throttle
+            #Backward
             elif(data[0] == b'U'): 
-                print("Moving up")
-                #Script.SendRC(8, 1700, True) #manual mode
-                Script.SendRC(1, 1500, True) #level roll            
+                print("Moving backward")
+                Script.SendRC(1, 1500, True) #level roll 
+                Script.SendRC(2, 1000, True) #pitch up           
                 Script.SendRC(3, 1500, True) #neutral throttle
-                Script.SendRC(2, 1000, True) #pitch up
-                #Script.Sleep(2000)
+            #Forward
             elif(data[0] == b'D'): 
-                print("Moving down")
-                #Script.SendRC(8, 1700, True) #manual mode
-                Script.SendRC(1, 1500, True) #level roll            
+                print("Moving forward")
+                Script.SendRC(1, 1500, True) #level roll   
+                Script.SendRC(2, 1800, True) #pitch down         
                 Script.SendRC(3, 1500, True) #neutral throttle
-                Script.SendRC(2, 1750, True) #pitch down
-                #Script.Sleep(2000)
             
 
     print("Closing bluetooth & Ending")
     s.close()
 
-def land():
-    print("Landing")
-    Script.ChangeMode('Land')
-    Script.Sleep(5000) 
-
+#panic button- disarm motors
 def panic(): 
     MAV.doARM(False)
 
 def main():
+    #prepare drone
     for channel in range(1, 9):
         Script.SendRC(channel, 1500, True)
 
